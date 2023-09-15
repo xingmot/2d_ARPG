@@ -3,7 +3,7 @@
     <CLASSES />
     <JAVADOC />
     <SOURCES>
-      <root url="file://D:/software/godot/GdSdk 4.1.1" />
+      <root url="file://$PROJECT_DIR$/../../gdk/GdSdk 4.1.1" />
     </SOURCES>
   </library>
 </component>

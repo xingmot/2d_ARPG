@@ -7,14 +7,16 @@ enum State {
 	FALL,
 	HIGH_FALL,
 	LANDING,
-	WALL_SLIDING
+	WALL_SLIDING,
+	WALL_JUMP
 }
 const GROUND_STATES      := [State.IDLE, State.RUNNING, State.LANDING]
 const RUN_SPEED          := 160.0
 const JUMP_VELOCITY      := -320.0
+const WALL_JUMP_VELOCITY := Vector2(300, -320)
 const LANDING_VELOCITY   := 420
 const FLOOR_ACCELERATION := RUN_SPEED / 0.2
-const AIR_ACCELERATION   := RUN_SPEED / 0.02
+const AIR_ACCELERATION   := RUN_SPEED / 0.1
 const LANDING_FRICTION   := -RUN_SPEED / 0.3
 var default_gravity      := ProjectSettings.get("physics/2d/default_gravity") as float
 var is_first_tick        := false
@@ -24,7 +26,9 @@ var is_first_tick        := false
 @onready var coyote_timer: Timer = $CoyoteTimer
 @onready var jump_request_timer: Timer = $JumpRequestTimer
 @onready var foot_checker: RayCast2D = $Graphics/FootChecker
+@onready var wall_sliding_foot_checker = $Graphics/WallSlidingFootChecker
 @onready var hand_checker: RayCast2D = $Graphics/HandChecker
+@onready var state_machine = $StateMachine
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -35,6 +39,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if velocity.y < JUMP_VELOCITY / 2:
 			velocity.y = JUMP_VELOCITY / 2
 
+func stand( gravity: float,delta: float)->void:
+	var acceleration := FLOOR_ACCELERATION if is_on_floor() else AIR_ACCELERATION
+	velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
+	velocity.y += gravity * delta
+	move_and_slide()
 
 func move(acceleration: float, gravity: float, delta: float) -> void:
 	# 看玩家输入左还是右
@@ -60,6 +69,12 @@ func tick_physics(state: State, delta: float)->void:
 			move(acceleration, default_gravity, delta)
 		State.JUMP:
 			move(acceleration, 0.0 if is_first_tick else default_gravity, delta)
+		State.WALL_JUMP:
+			if state_machine.state_time < 0.1:
+				stand(0.0 if is_first_tick else default_gravity, delta)
+				graphics.scale.x = get_wall_normal().x
+			else:
+				move(acceleration, 0.0 if is_first_tick else default_gravity, delta)
 		State.LANDING:
 			move(LANDING_FRICTION, default_gravity, delta)
 		State.WALL_SLIDING:
@@ -94,7 +109,7 @@ func get_next_state(state: State) -> State:
 				return State.RUNNING
 			if is_on_wall() and hand_checker.is_colliding() and foot_checker.is_colliding():
 				return State.WALL_SLIDING
-			if velocity.y >= LANDING_VELOCITY:
+			elif velocity.y >= LANDING_VELOCITY:
 				return State.HIGH_FALL
 		State.HIGH_FALL:
 			if is_on_floor():
@@ -108,9 +123,15 @@ func get_next_state(state: State) -> State:
 			if not animation_player.is_playing():
 				return State.IDLE
 		State.WALL_SLIDING:
+			if jump_request_timer.time_left>0:
+				return State.WALL_JUMP
 			if is_on_floor():
 				return State.IDLE
-			if not is_on_wall() or not foot_checker.is_colliding():
+			if not is_on_wall() or not wall_sliding_foot_checker.is_colliding() and not foot_checker.is_colliding():
+				return State.FALL
+			print(wall_sliding_foot_checker.is_colliding())
+		State.WALL_JUMP:
+			if velocity.y >= 0:
 				return State.FALL
 
 	return state
@@ -136,9 +157,20 @@ func transition_state(from: State, to: State) -> void:
 		State.JUMP:
 			animation_player.play("jump")
 			velocity.y = JUMP_VELOCITY
+			coyote_timer.stop()
 			jump_request_timer.stop()
 		State.LANDING:
 			animation_player.play("landing")
 		State.WALL_SLIDING:
 			animation_player.play("wall_sliding")
+		State.WALL_JUMP:
+			animation_player.play("jump")
+			velocity = WALL_JUMP_VELOCITY
+			velocity.x *= get_wall_normal().x
+			jump_request_timer.stop()
+	if to == State.WALL_JUMP:
+		Engine.time_scale = 0.8
+	if from == State.WALL_JUMP:
+		Engine.time_scale = 1.0
+
 	is_first_tick = true

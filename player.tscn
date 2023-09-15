@@ -591,6 +591,10 @@ region_rect = Rect2(0, 0, 336, 56)
 position = Vector2(0, -2)
 target_position = Vector2(7, 0)
 
+[node name="WallSlidingFootChecker" type="RayCast2D" parent="Graphics"]
+position = Vector2(0, -2)
+target_position = Vector2(-7, 0)
+
 [node name="HandChecker" type="RayCast2D" parent="Graphics"]
 position = Vector2(0, -25)
 target_position = Vector2(7, 0)
