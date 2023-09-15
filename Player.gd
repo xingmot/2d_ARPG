@@ -8,9 +8,17 @@ enum State {
 	HIGH_FALL,
 	LANDING,
 	WALL_SLIDING,
-	WALL_JUMP
+	WALL_JUMP,
+	LOOK_UP,
+	LOOK_UP_LEFT,
+	LOOK_UP_RIGHT,
+	LOOK_DOWN,
+	LOOK_DOWN_LEFT,
+	LOOK_DOWN_RIGHT,
 }
 const GROUND_STATES      := [State.IDLE, State.RUNNING, State.LANDING]
+const LOOK_UP_STATES     := [State.LOOK_UP, State.LOOK_UP_LEFT, State.LOOK_UP_RIGHT]
+const LOOK_DOWN_STATES   := [State.LOOK_DOWN, State.LOOK_DOWN_LEFT, State.LOOK_DOWN_RIGHT]
 const RUN_SPEED          := 160.0
 const JUMP_VELOCITY      := -320.0
 const WALL_JUMP_VELOCITY := Vector2(300, -320)
@@ -18,9 +26,17 @@ const LANDING_VELOCITY   := 420
 const FLOOR_ACCELERATION := RUN_SPEED / 0.2
 const AIR_ACCELERATION   := RUN_SPEED / 0.1
 const LANDING_FRICTION   := -RUN_SPEED / 0.3
+const LOOK_HRANGE        := 200.0
+const LOOK_UP_RANGE      := 90.0
+const LOOK_DOWN_RANGE    := 160.0
 var default_gravity      := ProjectSettings.get("physics/2d/default_gravity") as float
 var is_first_tick        := false
+var is_look_up           := false
+var is_look_down         := false
+var old_camara_position  := Vector2(0.0, 0.0)
+var jump_released        := false
 
+@onready var camera_2d: Camera2D = $Camera2D
 @onready var graphics: Node2D = $Graphics
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 @onready var coyote_timer: Timer = $CoyoteTimer
@@ -36,14 +52,32 @@ func _unhandled_input(event: InputEvent) -> void:
 		jump_request_timer.start()
 	if event.is_action_released("jump"):
 		jump_request_timer.stop()
-		if velocity.y < JUMP_VELOCITY / 2:
-			velocity.y = JUMP_VELOCITY / 2
+		jump_released = true
 
-func stand( gravity: float,delta: float)->void:
+	if event.is_action_pressed("look_up"):
+		is_look_up = true
+	if event.is_action_released("look_up"):
+		is_look_up = false
+	if event.is_action_pressed("look_down"):
+		is_look_down = true
+	if event.is_action_released("look_down"):
+		is_look_down = false
+
+
+func stand(gravity: float, delta: float)->void:
 	var acceleration := FLOOR_ACCELERATION if is_on_floor() else AIR_ACCELERATION
 	velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 	velocity.y += gravity * delta
 	move_and_slide()
+
+
+func look(gravity: float, delta: float) -> void:
+	# 看玩家输入左还是右
+	var direction := Input.get_axis("move_left", "move_right")
+	if not is_zero_approx(direction):
+		graphics.scale.x = -1 if direction < 0 else 1
+	move_and_slide()
+
 
 func move(acceleration: float, gravity: float, delta: float) -> void:
 	# 看玩家输入左还是右
@@ -68,8 +102,15 @@ func tick_physics(state: State, delta: float)->void:
 		State.RUNNING, State.IDLE, State.FALL, State.HIGH_FALL:
 			move(acceleration, default_gravity, delta)
 		State.JUMP:
+			if jump_released and velocity.y<JUMP_VELOCITY /2:
+				velocity.y = JUMP_VELOCITY/2
+				jump_released=false
 			move(acceleration, 0.0 if is_first_tick else default_gravity, delta)
 		State.WALL_JUMP:
+			if jump_released and velocity.y<WALL_JUMP_VELOCITY.y /2:
+				velocity.y = WALL_JUMP_VELOCITY.y/2
+				velocity.x = WALL_JUMP_VELOCITY.x/2
+				jump_released=false
 			if state_machine.state_time < 0.1:
 				stand(0.0 if is_first_tick else default_gravity, delta)
 				graphics.scale.x = get_wall_normal().x
@@ -80,6 +121,10 @@ func tick_physics(state: State, delta: float)->void:
 		State.WALL_SLIDING:
 			move(acceleration, default_gravity*0.3, delta)
 			graphics.scale.x = get_wall_normal().x
+		State.LOOK_UP, State.LOOK_UP_LEFT, State.LOOK_UP_RIGHT:
+			look(default_gravity, delta)
+		State.LOOK_DOWN, State.LOOK_DOWN_LEFT, State.LOOK_DOWN_RIGHT:
+			look(default_gravity, delta)
 
 	is_first_tick = false
 
@@ -87,16 +132,20 @@ func tick_physics(state: State, delta: float)->void:
 func get_next_state(state: State) -> State:
 	var can_jump := is_on_floor() or coyote_timer.time_left > 0
 	var should_jump := can_jump and jump_request_timer.time_left > 0
+	var direction := Input.get_axis("move_left", "move_right")
 	if should_jump:
 		return State.JUMP
 
-	var direction := Input.get_axis("move_left", "move_right")
 	var is_still := is_zero_approx(direction) and is_zero_approx(velocity.x)
 
 	match state:
 		State.IDLE:
 			if not is_on_floor():
 				return State.FALL
+			if is_zero_approx(velocity.x) and is_look_up:
+				return State.LOOK_UP
+			if is_zero_approx(velocity.x) and is_look_down:
+				return State.LOOK_DOWN
 			if not is_still:
 				return State.RUNNING
 		State.RUNNING:
@@ -118,6 +167,7 @@ func get_next_state(state: State) -> State:
 				return State.WALL_SLIDING
 		State.JUMP:
 			if velocity.y >= 0:
+				jump_released = false
 				return State.FALL
 		State.LANDING:
 			if not animation_player.is_playing():
@@ -129,10 +179,24 @@ func get_next_state(state: State) -> State:
 				return State.IDLE
 			if not is_on_wall() or not wall_sliding_foot_checker.is_colliding() and not foot_checker.is_colliding():
 				return State.FALL
-			print(wall_sliding_foot_checker.is_colliding())
 		State.WALL_JUMP:
 			if velocity.y >= 0:
 				return State.FALL
+		State.LOOK_UP, State.LOOK_UP_LEFT, State.LOOK_UP_RIGHT:
+			if not is_look_up:
+				return State.IDLE
+			if direction > 0:
+				return State.LOOK_UP_RIGHT
+			elif direction < 0:
+				return State.LOOK_UP_LEFT
+		State.LOOK_DOWN, State.LOOK_DOWN_LEFT, State.LOOK_DOWN_RIGHT:
+			if not is_look_down:
+				return State.IDLE
+			if direction > 0:
+				return State.LOOK_DOWN_RIGHT
+			elif direction < 0:
+				return State.LOOK_DOWN_LEFT
+
 
 	return state
 
@@ -168,9 +232,35 @@ func transition_state(from: State, to: State) -> void:
 			velocity = WALL_JUMP_VELOCITY
 			velocity.x *= get_wall_normal().x
 			jump_request_timer.stop()
+		State.LOOK_UP:
+			animation_player.play("idle")
+			old_camara_position = camera_2d.position
+			camera_2d.position.y -= LOOK_UP_RANGE
+		State.LOOK_UP_LEFT:
+			animation_player.play("idle")
+			camera_2d.position.x -= LOOK_HRANGE
+		State.LOOK_UP_RIGHT:
+			animation_player.play("idle")
+			camera_2d.position.x += LOOK_HRANGE
+		State.LOOK_DOWN:
+			animation_player.play("idle")
+			old_camara_position = camera_2d.position
+			camera_2d.position.y += LOOK_DOWN_RANGE
+		State.LOOK_DOWN_LEFT:
+			animation_player.play("idle")
+			camera_2d.position.x -= LOOK_HRANGE
+		State.LOOK_DOWN_RIGHT:
+			animation_player.play("idle")
+			camera_2d.position.x += LOOK_HRANGE
 	if to == State.WALL_JUMP:
 		Engine.time_scale = 0.8
 	if from == State.WALL_JUMP:
 		Engine.time_scale = 1.0
-
+	if ((from in LOOK_UP_STATES and not to in LOOK_UP_STATES)
+	or (from in LOOK_DOWN_STATES and not to in LOOK_DOWN_STATES)):
+		camera_2d.position = old_camara_position
+	if from == State.FALL and to == State.WALL_SLIDING:
+		velocity.y *= 0.3
+	if not to == State.FALL and not to == State.HIGH_FALL:
+		jump_released=false
 	is_first_tick = true

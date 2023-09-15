@@ -503,10 +503,13 @@ position = Vector2(256, -72)
 
 [node name="Camera2D" type="Camera2D" parent="Player"]
 position = Vector2(4, -63)
+process_callback = 0
 limit_smoothed = true
 position_smoothing_enabled = true
 drag_horizontal_enabled = true
 drag_vertical_enabled = true
+editor_draw_limits = true
+editor_draw_drag_margin = true
 
 [node name="Decorations" type="Node2D" parent="."]
 metadata/_edit_lock_ = true
