@@ -628,6 +628,7 @@ region_rect = Rect2(210, 101, 124, 86)
 
 [node name="Foreground" type="ParallaxBackground" parent="Decorations"]
 layer = 1
+visible = false
 
 [node name="Bushes" type="ParallaxLayer" parent="Decorations/Foreground"]
 motion_scale = Vector2(1.1, 1.1)
