@@ -15,8 +15,14 @@ enum State {
 	LOOK_DOWN,
 	LOOK_DOWN_LEFT,
 	LOOK_DOWN_RIGHT,
+	ATTACK_1,
+	ATTACK_2,
+	ATTACK_3,
 }
-const GROUND_STATES      := [State.IDLE, State.RUNNING, State.LANDING]
+const GROUND_STATES      := [State.IDLE, State.RUNNING, State.LANDING,
+							State.LOOK_UP, State.LOOK_UP_LEFT, State.LOOK_UP_RIGHT,
+							State.LOOK_DOWN, State.LOOK_DOWN_LEFT, State.LOOK_DOWN_RIGHT,
+							State.ATTACK_1, State.ATTACK_2, State.ATTACK_3]
 const LOOK_UP_STATES     := [State.LOOK_UP, State.LOOK_UP_LEFT, State.LOOK_UP_RIGHT]
 const LOOK_DOWN_STATES   := [State.LOOK_DOWN, State.LOOK_DOWN_LEFT, State.LOOK_DOWN_RIGHT]
 const RUN_SPEED          := 160.0
@@ -29,12 +35,13 @@ const LANDING_FRICTION   := -RUN_SPEED / 0.3
 const LOOK_HRANGE        := 200.0
 const LOOK_UP_RANGE      := 90.0
 const LOOK_DOWN_RANGE    := 160.0
-var default_gravity      := ProjectSettings.get("physics/2d/default_gravity") as float
-var is_first_tick        := false
-var is_look_up           := false
-var is_look_down         := false
-var old_camara_position  := Vector2(0.0, 0.0)
-var jump_released        := false
+@export var can_combo   := false
+
+var default_gravity     := ProjectSettings.get("physics/2d/default_gravity") as float
+var is_first_tick       := false
+var is_combo_request    := false
+var old_camara_position := Vector2(0.0, 0.0)
+var jump_released       := false
 
 @onready var camera_2d: Camera2D = $Camera2D
 @onready var graphics: Node2D = $Graphics
@@ -54,14 +61,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		jump_request_timer.stop()
 		jump_released = true
 
-	if event.is_action_pressed("look_up"):
-		is_look_up = true
-	if event.is_action_released("look_up"):
-		is_look_up = false
-	if event.is_action_pressed("look_down"):
-		is_look_down = true
-	if event.is_action_released("look_down"):
-		is_look_down = false
+	if event.is_action_pressed("attack") and can_combo:
+		is_combo_request = true
 
 
 func stand(gravity: float, delta: float)->void:
@@ -133,24 +134,27 @@ func get_next_state(state: State) -> State:
 	var can_jump := is_on_floor() or coyote_timer.time_left > 0
 	var should_jump := can_jump and jump_request_timer.time_left > 0
 	var direction := Input.get_axis("move_left", "move_right")
+	var v_look_direction := Input.get_axis("look_up", "look_down")
+	
 	if should_jump:
 		return State.JUMP
 
 	var is_still := is_zero_approx(direction) and is_zero_approx(velocity.x)
 
+	if state in GROUND_STATES and not is_on_floor():
+		return State.FALL
+
 	match state:
 		State.IDLE:
-			if not is_on_floor():
-				return State.FALL
-			if is_zero_approx(velocity.x) and is_look_up:
+			if Input.is_action_just_pressed("attack"):
+				return State.ATTACK_1
+			if is_zero_approx(velocity.x) and v_look_direction<0:
 				return State.LOOK_UP
-			if is_zero_approx(velocity.x) and is_look_down:
+			if is_zero_approx(velocity.x) and v_look_direction>0:
 				return State.LOOK_DOWN
 			if not is_still:
 				return State.RUNNING
 		State.RUNNING:
-			if not is_on_floor():
-				return State.FALL
 			if is_still:
 				return State.IDLE
 		State.FALL:
@@ -183,25 +187,38 @@ func get_next_state(state: State) -> State:
 			if velocity.y >= 0:
 				return State.FALL
 		State.LOOK_UP, State.LOOK_UP_LEFT, State.LOOK_UP_RIGHT:
-			if not is_look_up:
+			if v_look_direction==0:
 				return State.IDLE
 			if direction > 0:
 				return State.LOOK_UP_RIGHT
 			elif direction < 0:
 				return State.LOOK_UP_LEFT
 		State.LOOK_DOWN, State.LOOK_DOWN_LEFT, State.LOOK_DOWN_RIGHT:
-			if not is_look_down:
+			if v_look_direction==0:
 				return State.IDLE
 			if direction > 0:
 				return State.LOOK_DOWN_RIGHT
 			elif direction < 0:
 				return State.LOOK_DOWN_LEFT
+		State.ATTACK_1:
+			if not animation_player.is_playing():
+					return State.ATTACK_2 if is_combo_request else State.IDLE
+		State.ATTACK_2:
+			if not animation_player.is_playing():
+				return State.ATTACK_3 if is_combo_request else State.IDLE
+		State.ATTACK_3:
+			return State.IDLE
 
 
 	return state
 
 
 func transition_state(from: State, to: State) -> void:
+	print("[%s] %s => %s"% [
+		Engine.get_physics_frames(),
+		State.keys()[from] if from != -1 else "<START>",
+		State.keys()[to]
+	])
 	if not from in GROUND_STATES and to in GROUND_STATES:
 		coyote_timer.stop()
 
@@ -236,22 +253,20 @@ func transition_state(from: State, to: State) -> void:
 			animation_player.play("idle")
 			old_camara_position = camera_2d.position
 			camera_2d.position.y -= LOOK_UP_RANGE
-		State.LOOK_UP_LEFT:
+		State.LOOK_UP_LEFT, State.LOOK_DOWN_LEFT:
 			animation_player.play("idle")
 			camera_2d.position.x -= LOOK_HRANGE
-		State.LOOK_UP_RIGHT:
+			if from == State.LOOK_DOWN_RIGHT or from == State.LOOK_UP_RIGHT:
+				camera_2d.position.x -= LOOK_HRANGE
+		State.LOOK_UP_RIGHT, State.LOOK_DOWN_RIGHT:
 			animation_player.play("idle")
 			camera_2d.position.x += LOOK_HRANGE
+			if from == State.LOOK_DOWN_LEFT or from == State.LOOK_UP_LEFT:
+				camera_2d.position.x += LOOK_HRANGE
 		State.LOOK_DOWN:
 			animation_player.play("idle")
 			old_camara_position = camera_2d.position
 			camera_2d.position.y += LOOK_DOWN_RANGE
-		State.LOOK_DOWN_LEFT:
-			animation_player.play("idle")
-			camera_2d.position.x -= LOOK_HRANGE
-		State.LOOK_DOWN_RIGHT:
-			animation_player.play("idle")
-			camera_2d.position.x += LOOK_HRANGE
 	if to == State.WALL_JUMP:
 		Engine.time_scale = 0.8
 	if from == State.WALL_JUMP:
@@ -259,6 +274,7 @@ func transition_state(from: State, to: State) -> void:
 	if ((from in LOOK_UP_STATES and not to in LOOK_UP_STATES)
 	or (from in LOOK_DOWN_STATES and not to in LOOK_DOWN_STATES)):
 		camera_2d.position = old_camara_position
+
 	if from == State.FALL and to == State.WALL_SLIDING:
 		velocity.y *= 0.3
 	if not to == State.FALL and not to == State.HIGH_FALL:

@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://cbn0tm70ui6qo"]
+[gd_scene load_steps=10 format=3 uid="uid://cbn0tm70ui6qo"]
 
 [ext_resource type="Script" path="res://world.gd" id="1_2wni7"]
 [ext_resource type="Texture2D" uid="uid://tltk5y3mqhbw" path="res://assets/tileset/Tree-Assets.png" id="2_4y0hh"]
@@ -6,6 +6,7 @@
 [ext_resource type="Texture2D" uid="uid://draj2nxpwuvhr" path="res://assets/background/Background.png" id="4_f4vh1"]
 [ext_resource type="Texture2D" uid="uid://0cxr8ddqhs2e" path="res://assets/background/bacground_hill.png" id="5_thlxr"]
 [ext_resource type="Texture2D" uid="uid://bdcuhj0g6dgid" path="res://assets/background/background_tree.png" id="6_8wlaw"]
+[ext_resource type="PackedScene" uid="uid://pcxi7txyd171" path="res://enemies/boar.tscn" id="7_1axps"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_qx344"]
 texture = ExtResource("2_4y0hh")
@@ -499,7 +500,7 @@ layer_2/z_index = 0
 layer_2/tile_data = PackedInt32Array(720903, 589824, 3, 589846, 524288, 2, 589849, 655360, 2, 589852, 458752, 3, 589855, 589824, 2, 589861, 589824, 2, 589876, 524288, 3, 589877, 524288, 3, 589878, 655360, 2, -131028, 655360, 2, -327649, 524288, 3, -327652, 589824, 3, -327656, 589824, 3, -327659, 393216, 3, -327661, 393216, 3, 19, 589824, 2, 24, 589824, 2, 27, 524288, 2, -65526, 393216, 3, -196603, 655360, 2, -196604, 393216, 3, -524289, 589824, 3, -524293, 589824, 3)
 
 [node name="Player" parent="." instance=ExtResource("2_uua2o")]
-position = Vector2(256, -72)
+position = Vector2(132, 182)
 
 [node name="Camera2D" type="Camera2D" parent="Player"]
 position = Vector2(4, -63)
@@ -691,3 +692,9 @@ region_enabled = true
 region_rect = Rect2(210, 101, 124, 86)
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="Decorations"]
+
+[node name="Boar" parent="." instance=ExtResource("7_1axps")]
+position = Vector2(410, 90)
+direction = -1
+max_speed = 180.0
+acceleration = 2000.0
