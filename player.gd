@@ -35,7 +35,7 @@ const LANDING_FRICTION   := -RUN_SPEED / 0.3
 const LOOK_HRANGE        := 200.0
 const LOOK_UP_RANGE      := 90.0
 const LOOK_DOWN_RANGE    := 160.0
-@export var can_combo   := false
+@export var can_combo := false
 
 var default_gravity     := ProjectSettings.get("physics/2d/default_gravity") as float
 var is_first_tick       := false
@@ -65,6 +65,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		is_combo_request = true
 
 
+# 移速为0且朝向固定，但仍受重力影响
 func stand(gravity: float, delta: float)->void:
 	var acceleration := FLOOR_ACCELERATION if is_on_floor() else AIR_ACCELERATION
 	velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
@@ -72,17 +73,20 @@ func stand(gravity: float, delta: float)->void:
 	move_and_slide()
 
 
+# left right不再是移动，而是控制视角的左右和人物朝向
 func look(gravity: float, delta: float) -> void:
 	# 看玩家输入左还是右
 	var direction := Input.get_axis("move_left", "move_right")
 	if not is_zero_approx(direction):
 		graphics.scale.x = -1 if direction < 0 else 1
+	velocity.y += gravity * delta
 	move_and_slide()
 
 
 func move(acceleration: float, gravity: float, delta: float) -> void:
 	# 看玩家输入左还是右
 	var direction := Input.get_axis("move_left", "move_right")
+	# 添加水平加速度为负数时，设为减速，如landing时水平移速会减慢
 	if acceleration < 0 and not is_zero_approx(velocity.x):
 		var v = velocity.x + acceleration*delta if velocity.x>0 else velocity.x - acceleration*delta
 		if v*velocity.x<0:
@@ -126,7 +130,8 @@ func tick_physics(state: State, delta: float)->void:
 			look(default_gravity, delta)
 		State.LOOK_DOWN, State.LOOK_DOWN_LEFT, State.LOOK_DOWN_RIGHT:
 			look(default_gravity, delta)
-
+		State.ATTACK_1,State.ATTACK_2,State.ATTACK_3:
+			stand(default_gravity,delta)
 	is_first_tick = false
 
 
@@ -135,11 +140,12 @@ func get_next_state(state: State) -> State:
 	var should_jump := can_jump and jump_request_timer.time_left > 0
 	var direction := Input.get_axis("move_left", "move_right")
 	var v_look_direction := Input.get_axis("look_up", "look_down")
-	
+
 	if should_jump:
 		return State.JUMP
 
 	var is_still := is_zero_approx(direction) and is_zero_approx(velocity.x)
+	var can_wall_sliding := is_on_wall() and hand_checker.is_colliding() and foot_checker.is_colliding()
 
 	if state in GROUND_STATES and not is_on_floor():
 		return State.FALL
@@ -155,19 +161,21 @@ func get_next_state(state: State) -> State:
 			if not is_still:
 				return State.RUNNING
 		State.RUNNING:
+			if Input.is_action_just_pressed("attack"):
+				return State.ATTACK_1
 			if is_still:
 				return State.IDLE
 		State.FALL:
 			if is_on_floor():
 				return State.RUNNING
-			if is_on_wall() and hand_checker.is_colliding() and foot_checker.is_colliding():
+			if can_wall_sliding:
 				return State.WALL_SLIDING
 			elif velocity.y >= LANDING_VELOCITY:
 				return State.HIGH_FALL
 		State.HIGH_FALL:
 			if is_on_floor():
 				return State.LANDING
-			if is_on_wall() and hand_checker.is_colliding() and foot_checker.is_colliding():
+			if can_wall_sliding:
 				return State.WALL_SLIDING
 		State.JUMP:
 			if velocity.y >= 0:
@@ -202,12 +210,13 @@ func get_next_state(state: State) -> State:
 				return State.LOOK_DOWN_LEFT
 		State.ATTACK_1:
 			if not animation_player.is_playing():
-					return State.ATTACK_2 if is_combo_request else State.IDLE
+				return State.ATTACK_2 if is_combo_request else State.IDLE
 		State.ATTACK_2:
 			if not animation_player.is_playing():
 				return State.ATTACK_3 if is_combo_request else State.IDLE
 		State.ATTACK_3:
-			return State.IDLE
+			if not animation_player.is_playing():
+				return State.IDLE
 
 
 	return state
@@ -215,9 +224,9 @@ func get_next_state(state: State) -> State:
 
 func transition_state(from: State, to: State) -> void:
 	print("[%s] %s => %s"% [
-		Engine.get_physics_frames(),
-		State.keys()[from] if from != -1 else "<START>",
-		State.keys()[to]
+	Engine.get_physics_frames(),
+	State.keys()[from] if from != -1 else "<START>",
+	State.keys()[to]
 	])
 	if not from in GROUND_STATES and to in GROUND_STATES:
 		coyote_timer.stop()
@@ -267,6 +276,15 @@ func transition_state(from: State, to: State) -> void:
 			animation_player.play("idle")
 			old_camara_position = camera_2d.position
 			camera_2d.position.y += LOOK_DOWN_RANGE
+		State.ATTACK_1:
+			animation_player.play("attack_1")
+			is_combo_request = false
+		State.ATTACK_2:
+			animation_player.play("attack_2")
+			is_combo_request = false
+		State.ATTACK_3:
+			animation_player.play("attack_3")
+			is_combo_request = false
 	if to == State.WALL_JUMP:
 		Engine.time_scale = 0.8
 	if from == State.WALL_JUMP:
