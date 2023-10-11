@@ -501,7 +501,6 @@ layer_2/tile_data = PackedInt32Array(720903, 589824, 3, 589846, 524288, 2, 58984
 
 [node name="Player" parent="." instance=ExtResource("2_uua2o")]
 position = Vector2(132, 182)
-can_combo = false
 
 [node name="Camera2D" type="Camera2D" parent="Player"]
 position = Vector2(4, -63)

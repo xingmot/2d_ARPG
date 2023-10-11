@@ -1,7 +1,9 @@
-[gd_scene load_steps=3 format=3 uid="uid://cp5sjncsnffn1"]
+[gd_scene load_steps=5 format=3 uid="uid://cp5sjncsnffn1"]
 
 [ext_resource type="Script" path="res://classes/StateMachine.gd" id="1_7lga4"]
 [ext_resource type="Script" path="res://enemies/enemy.gd" id="1_ox8mt"]
+[ext_resource type="Script" path="res://classes/HitBox.gd" id="2_uo3f6"]
+[ext_resource type="Script" path="res://classes/HurtBox.gd" id="3_23od0"]
 
 [node name="Enemy" type="CharacterBody2D"]
 collision_layer = 4
@@ -10,6 +12,16 @@ script = ExtResource("1_ox8mt")
 [node name="Graphics" type="Node2D" parent="."]
 
 [node name="Sprite2D" type="Sprite2D" parent="Graphics"]
+
+[node name="HurtBox" type="Area2D" parent="Graphics"]
+collision_layer = 16
+collision_mask = 0
+script = ExtResource("3_23od0")
+
+[node name="HitBox" type="Area2D" parent="Graphics"]
+collision_layer = 0
+collision_mask = 8
+script = ExtResource("2_uo3f6")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 
