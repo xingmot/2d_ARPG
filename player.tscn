@@ -1327,6 +1327,7 @@ disabled = true
 [node name="AttackShape2" type="CollisionShape2D" parent="Graphics/HitBox"]
 position = Vector2(5.5, -15.75)
 shape = SubResource("RectangleShape2D_60wjq")
+disabled = true
 
 [node name="AttackShape3" type="CollisionShape2D" parent="Graphics/HitBox"]
 position = Vector2(8, -18.5)

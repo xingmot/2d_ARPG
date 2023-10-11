@@ -694,4 +694,4 @@ region_rect = Rect2(210, 101, 124, 86)
 [node name="ParallaxBackground" type="ParallaxBackground" parent="Decorations"]
 
 [node name="Boar" parent="." instance=ExtResource("7_1axps")]
-position = Vector2(410, 90)
+position = Vector2(440, 160)
